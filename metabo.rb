@@ -1,50 +1,23 @@
 require 'csv'
+@i = 0
+@m = 0
+@e = 0
+@array = []
+@qb_edit = []
 
 mfg = CSV.read("../csv/metabo.csv")
-qbil = CSV.read("../csv/itemlist116.csv")
+qbil = CSV.read("../csv/qbil1_23_20.csv")
 
 def runner(mfg, qbil)
-  i = 0
-  j = 0
-  fixed_items = []
   mfg = convert_to_hash(mfg)
   qbil = convert_to_hash(qbil)
-  mfg.each do |mfg_item|
-    if mfg_item['MPN'] != nil
-      items = pn_match(mfg_item, qbil)
-      if items != nil
-        j += 1
-        qb_item = items[0]
-        mfg_item = items[1]
-        if qb_item['Cost'] != mfg_item['Cost']
-          puts ""
-          p qb_item["Item"]
-          p "Cost  -  Sell"
-          p "#{qb_item['Cost']} - #{qb_item['Price']}"
-          margin = get_margin(qb_item['Cost'], qb_item['Price'])
-          p "margin = #{margin}"
-          if mfg_item['MAP'] != nil
-            check_map(qb_item, mfg_item)
-            p "Using Map Pricing"
-            i += 1
-          elsif
-            cost_fix(margin, qb_item, mfg_item)
-            i += 1
-          end
-          p "Fix"
-          p "#{qb_item['Cost']} - #{qb_item['Price']}"
-          fixed_items << qb_item
-        end
-      end
-    end
-  end
-  write_file(fixed_items, qbil)
-  puts "#{j} Matches"
-  puts "#{i} Total Edits"
+  parse_mpn(mfg, qbil)
+  # write_file(qbil, @array)
+  message
 end
 
-def write_file(ary, qbil)
-  CSV.open("../csv/metabo_edit.csv", "wb") do |csv|
+def write_file(qbil, ary)
+  CSV.open("../csv/mkt_edit.csv", "wb") do |csv|
     input = []
     qbil[0].each do |k,v|
       input << k
@@ -60,65 +33,133 @@ def write_file(ary, qbil)
   end
 end
 
-def check_map(qb_item, mfg_item)
-  qb_item['Cost'] = mfg_item["Cost"]
-  qb_item["Price"] = mfg_item['MAP']
-end
-
-def get_margin(cost, price)
-  cost = decimal_fix(cost)
-  price = decimal_fix(price)
-  if cost[1] != nil || price[1] != nil
-    match_decimal(cost, price)
-  end
-  return (cost.join.to_i * 100.00) / price.join.to_i
-end
-
-def match_decimal(cost, price)
-  if price[1] == nil
-    add_zeros(price, cost[1].to_s.length)
-  elsif cost[1] == nil
-    add_zeros(cost, price[1].to_s.length)
-  elsif price[1].to_s.length > cost[1].to_s.length
-    add_zeros(cost, price[1].to_s.length - cost[1].to_s.length)
-  elsif price[1].to_s.length < cost[1].to_s.length
-    add_zeros(price, cost[1].to_s.length - price[1].to_s.length)
+def parse_mpn(mfg, qbil)
+  mfg.each do |mfg_item|
+    if mfg_item["MPN"] != nil
+      @i += 1
+      parse_qbin(mfg_item, qbil)
+    end
   end
 end
 
-def add_zeros(item, number)
-  if item[1] == nil
-    item[1] = "0"
-    number -= 1
-  end
-  item[1] = item[1].to_s
-  number.times do
-    item[1] << "0"
-  end
-end
-
-def decimal_fix(string)
-  num = string.split(".").map{ |e| e.to_i}
-end
-
-def cost_fix(margin, qb_item, mfg_item)
-  qb_item['Cost'] = mfg_item['Cost']
-  cost = decimal_fix(qb_item['Cost'])
-  length = cost[1].to_s.length
-  qb_item['Price'] = '%.2f' % ((cost.join.to_i / (margin / 100.00)) / 10**length).to_s
-end
-
-def pn_match(mfg_item, qbil)
+def parse_qbin(mfg_item, qbil)
   qbil.each do |qb_item|
     if qb_item["MPN"] != nil
-      if qb_item['MPN'] == mfg_item['MPN']
-        return [qb_item, mfg_item]
+      if qb_item["MPN"] == mfg_item['MPN']
+        # p qb_item["MPN"]
+        @m += 1
+        compare_items(mfg_item, qb_item)
       end
     end
   end
+end
+
+def compare_items(mfg_item, qb_item)
+  correct_price(mfg_item, qb_item)
+  correct_desc(mfg_item, qb_item)
+  @array << qb_item
+end
+
+def correct_desc(mfg_item, qb_item)
+  if mfg_item["Pack"] != nil && mfg_item["Pack"].include?("Pkg")
+    pack = mfg_item["Pack"].split('/')[1]
+  else
+    pack = mfg_item["Pack"]
+  end
+  qb_item['Unit Qty'] = pack
+  qb_item['Weight'] = calculate_Weight(mfg_item)
+  return qb_item
+end
+
+def calculate_Weight(mfg_item)
+  weight = (mfg_item['Weight'].to_f / mfg_item['Pack'].to_f)
+  if weight <= 2
+    weight += 0.2
+  else
+    weight += (weight * 4) / 100
+  end
+  return weight.round(4).to_s
+end
+
+def correct_price(mfg_item, qb_item)
+  mfg_cost = mfg_item["Cost"].to_f.round(2)
+  qb_cost = qb_item["Cost"]
+
+  # else
+    @e += 1
+    margin = calculate_margin(qb_item)
+    p "#{mfg_item['MPN']} - #{margin}"
+    if margin == nil
+      margin = input_margin(margin, mfg_item, mfg_cost)
+    end
+    qb_item['Cost'] = mfg_cost.round(4)
+    qb_item['Price'] = ((mfg_cost / margin) * 1.00).round(4)
+  return qb_item
+end
+
+def input_margin(margin, mfg_item, mfg_cost)
+  puts "*************************"
+  puts "No Margin Found"
+  puts "-------------------------"
+  puts "MFG Desc: #{mfg_item['MPN']}"
+  puts "MFG Unit Price: #{mfg_item['Cost']}, MFG PackSize: #{mfg_item['Pack']}}"
+  puts "MFG: Item Cost: #{mfg_cost / 100}"
+  puts "-------------------------"
+  puts "Enter Desired Margin: ie - 25 = 25%"
+  input = gets.chomp
+  input = (((input.to_i / 100.00) - 1.00) * -1.00)
+  return input
+end
+
+def calculate_margin(qb_item)
+  # if qb_item['Cost'].split(".")[1].length != nil || qb_item['Price'].split(".")[1].length != nil || qb_item['Cost'].split(".")[1].length == qb_item['Price'].split(".")[1].length
+  # else
+  p qb_item['Cost']
+    if qb_item['Cost'].delete('.').to_i != 0 || qb_item['Price'].delete('.').to_i != 0
+      qbc = qb_item["Cost"].delete('.')
+      qbp = qb_item['Price'].delete('.')
+      cl = qb_item['Cost'].split('.')[-1].length
+      pl = qb_item['Price'].split('.')[-1].length
+      if cl > pl
+        i = cl - pl
+         qbp = match_decimal(qbp, i)
+      else pl > cl
+        i = pl - cl
+        qbc = match_decimal(qbc, i)
+      end
+    end
+    margin = (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
+    # IF STATEMENT FOR MARGIN SIZE HERE
+    return (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
+  # end
   return nil
 end
 
+def match_decimal(num, i)
+  i.times do
+    num = num + "0"
+  end
+  return num
+end
+
+def calculate_qb_cost(qb_item)
+  return (qb_item['Cost'].delete('.').to_i) * 100
+end
+
+# def calculate_mfg_cost(mfg_item)
+#   mfg_unit_price = 1000.00 if mfg_item['PRICE PER'] == "M"
+#   mfg_unit_price = 100.00 if mfg_item['PRICE PER'] == "C"
+#   mfg_unit_price = 1.00 if mfg_item['PRICE PER'] == "EA"
+#   return mfg_item['Cost'].to_f / mfg_unit_price
+# end
+
+def message
+  p "*************************"
+  p "-------------------------"
+  p "Total items: #{@i}"
+  p "Total matches: #{@m}"
+  p "Total price edits: #{@e}"
+end
 
 def convert_to_hash(file)
   array = []
@@ -129,3 +170,5 @@ def convert_to_hash(file)
 end
 
 runner(mfg, qbil)
+
+
