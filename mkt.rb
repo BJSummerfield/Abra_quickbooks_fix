@@ -5,9 +5,8 @@ require 'csv'
 @array = []
 
 mfg = CSV.read("../csv/mkt.csv")
-qbil = CSV.read("../csv/qbil122719.csv")
+qbil = CSV.read("../csv/qbil1_23_20.csv")
 
-# match qbil = MPN - mfg = Part No.
 def runner(mfg, qbil)
   mfg = convert_to_hash(mfg)
   qbil = convert_to_hash(qbil)
@@ -33,7 +32,6 @@ def write_file(qbil, ary)
   end
 end
 
-
 def parse_mpn(mfg, qbil)
   mfg.each do |mfg_item|
     @i += 1
@@ -46,7 +44,6 @@ def parse_qbin(mfg_item, qbil)
     if qb_item["MPN"] == mfg_item['Part No.']
       @m += 1
       compare_items(mfg_item, qb_item)
-      # Put comparisons into new array here
     end
   end
 end
@@ -58,46 +55,35 @@ def compare_items(mfg_item, qb_item)
 end
 
 def correct_desc(mfg_item, qb_item)
-  qb_item['Description'] = mfg_item['Description']
-  qb_item['Purchase Description'] = mfg_item['Description']
-  qb_item['Unit Quantity'] = mfg_item['INNER QTY']
-  qb_item['Weight'] = mfg_item['Wt (lbs)']
-  qb_item['Edit'] = "X"
+  qb_item['Unit Qty'] = mfg_item['INNER QTY']
+  qb_item['Weight'] = calculate_Weight(mfg_item)
   return qb_item
+end
+
+def calculate_Weight(mfg_item)
+  weight = (mfg_item['Wt (lbs)'].to_f / mfg_item['INNER QTY'].to_f)
+  if weight <= 2
+    weight += 0.2
+  else
+    weight += (weight * 4) / 100
+  end
+  return weight.round(4).to_s
 end
 
 def correct_price(mfg_item, qb_item)
   mfg_cost = calculate_mfg_cost(mfg_item)
-  qb_cost = calculate_qb_cost(qb_item)
-  if mfg_cost == qb_cost
-  else
+  qb_cost = qb_item["Cost"]
+  # if mfg_cost.to_s == qb_cost.to_s
+  # else
     @e += 1
-    margin = calculate_margin(qb_item)
-    # p margin
-    if margin == nil
-      margin = input_margin(margin, mfg_item, mfg_cost)
-    end
-    qb_item['Cost'] = mfg_cost / 100
-    qb_item['Price'] = ((mfg_cost / 100) / margin) * 1.00
-    # p '****************************************'
-    # p '****************************************'
-    # p "QB Desc: #{qb_item['Description']}"
-    # p "QB Cost: #{qb_item['Cost']}, QB Sell #{qb_item['Price']}"
-    # if margin != 'No existing Margin'
-    #   p "QB Margin: #{((margin - 1) * (-1)) * 100}%"
-    # else
-    #   p "QB Margin: #{margin}"
+    margin = 0.5 #calculate_margin(qb_item) if copying margins
+
+    # if margin == nil
+    #   margin = input_margin(margin, mfg_item, mfg_cost)
     # end
-    # p "----------------------------------------"
-    # p "MFG Desc: #{mfg_item['Description']}"
-    # p "MFG Unit Price: #{mfg_item['PRICE PER']}, MFG PackSize: #{mfg_item['INNER QTY']}, MFG Cost: #{mfg_item['Cost']}"
-    # p "MFG: Item Cost: #{mfg_cost / 100}"
-    # if margin != 'No existing Margin'
-    #   p "New Sell: #{((mfg_cost / 100) / margin) * 1.00}"
-    # else
-    #   p margin
-    # end
-  end
+    qb_item['Cost'] = mfg_cost.round(4)
+    qb_item['Price'] = ((mfg_cost / margin) * 1.00).round(4)
+  # end
   return qb_item
 end
 
@@ -114,8 +100,6 @@ def input_margin(margin, mfg_item, mfg_cost)
   input = (((input.to_i / 100.00) - 1.00) * -1.00)
   return input
 end
-
-
 
 def calculate_margin(qb_item)
   if qb_item['Cost'].delete('.').to_i != 0 || qb_item['Price'].delete('.').to_i != 0
@@ -145,19 +129,14 @@ def match_decimal(num, i)
 end
 
 def calculate_qb_cost(qb_item)
-  return qb_item['Cost'].delete('.').to_i
+  return (qb_item['Cost'].delete('.').to_i) * 100
 end
 
 def calculate_mfg_cost(mfg_item)
   mfg_unit_price = 1000.00 if mfg_item['PRICE PER'] == "M"
   mfg_unit_price = 100.00 if mfg_item['PRICE PER'] == "C"
   mfg_unit_price = 1.00 if mfg_item['PRICE PER'] == "EA"
-  # p mfg_item['INNER QTY'].to_i / mfg_unit_price
-  if mfg_item['Cost'].length > 1
-    return (mfg_item['INNER QTY'].to_i / mfg_unit_price) * mfg_item['Cost'].delete(".").to_i
-  else
-    return ((mfg_item['INNER QTY'].to_i / mfg_unit_price) * mfg_item['Cost'].to_i) * 100
-  end
+  return mfg_item['Cost'].to_f / mfg_unit_price
 end
 
 def message
@@ -165,10 +144,8 @@ def message
   p "-------------------------"
   p "Total items: #{@i}"
   p "Total matches: #{@m}"
-  p "Total edits: #{@e}"
+  p "Total price edits: #{@e}"
 end
-
-
 
 def convert_to_hash(file)
   array = []
