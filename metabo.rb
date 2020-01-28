@@ -17,7 +17,7 @@ def runner(mfg, qbil)
 end
 
 def write_file(qbil, ary)
-  CSV.open("../csv/mkt_edit.csv", "wb") do |csv|
+  CSV.open("../csv/metabo_edit.csv", "wb") do |csv|
     input = []
     qbil[0].each do |k,v|
       input << k
@@ -44,9 +44,8 @@ end
 
 def parse_qbin(mfg_item, qbil)
   qbil.each do |qb_item|
-    if qb_item["MPN"] != nil
+    if qb_item["MPN"] != nil && qb_item['MPN'].to_i != 0
       if qb_item["MPN"] == mfg_item['MPN']
-        # p qb_item["MPN"]
         @m += 1
         compare_items(mfg_item, qb_item)
       end
@@ -61,18 +60,23 @@ def compare_items(mfg_item, qb_item)
 end
 
 def correct_desc(mfg_item, qb_item)
-  if mfg_item["Pack"] != nil && mfg_item["Pack"].include?("Pkg")
-    pack = mfg_item["Pack"].split('/')[1]
+  if mfg_item["Pack"] == nil
+    pack = 1
+  elsif mfg_item["Pack"].include?("Pkg")
+    pack = mfg_item["Pack"].split('/')[1].to_i
   else
-    pack = mfg_item["Pack"]
+    pack = mfg_item["Pack"].to_i
   end
   qb_item['Unit Qty'] = pack
-  qb_item['Weight'] = calculate_Weight(mfg_item)
+  qb_item['Weight'] = calculate_Weight(mfg_item, pack)
+  p "PackSize  :  Weight"
+  p "#{qb_item["Unit Qty"]}   :   #{qb_item["Weight"]}"
+  p "****************"
   return qb_item
 end
 
-def calculate_Weight(mfg_item)
-  weight = (mfg_item['Weight'].to_f / mfg_item['Pack'].to_f)
+def calculate_Weight(mfg_item, pack)
+  weight = (mfg_item['Weight'].to_f / pack)
   if weight <= 2
     weight += 0.2
   else
@@ -84,16 +88,20 @@ end
 def correct_price(mfg_item, qb_item)
   mfg_cost = mfg_item["Cost"].to_f.round(2)
   qb_cost = qb_item["Cost"]
-
-  # else
-    @e += 1
-    margin = calculate_margin(qb_item)
-    p "#{mfg_item['MPN']} - #{margin}"
-    if margin == nil
-      margin = input_margin(margin, mfg_item, mfg_cost)
-    end
-    qb_item['Cost'] = mfg_cost.round(4)
+  @e += 1
+  margin = calculate_margin(qb_item, mfg_item)
+  if margin == nil
+    margin = input_margin(margin, mfg_item, mfg_cost)
+  end
+  qb_item['Cost'] = mfg_cost.round(4)
+  if mfg_item['MAP'] && mfg_item["MAP"] != 'tool'
+    qb_item['Price'] = mfg_item["MAP"]
+  else
     qb_item['Price'] = ((mfg_cost / margin) * 1.00).round(4)
+  end
+  p "#{mfg_item["MPN"]}"
+  p "Cost  :  Price  :  Margin"
+  p "#{qb_item['Cost']} : #{qb_item["Price"]} : #{margin}"
   return qb_item
 end
 
@@ -111,28 +119,38 @@ def input_margin(margin, mfg_item, mfg_cost)
   return input
 end
 
-def calculate_margin(qb_item)
-  # if qb_item['Cost'].split(".")[1].length != nil || qb_item['Price'].split(".")[1].length != nil || qb_item['Cost'].split(".")[1].length == qb_item['Price'].split(".")[1].length
-  # else
-  p qb_item['Cost']
-    if qb_item['Cost'].delete('.').to_i != 0 || qb_item['Price'].delete('.').to_i != 0
-      qbc = qb_item["Cost"].delete('.')
-      qbp = qb_item['Price'].delete('.')
-      cl = qb_item['Cost'].split('.')[-1].length
-      pl = qb_item['Price'].split('.')[-1].length
-      if cl > pl
-        i = cl - pl
-         qbp = match_decimal(qbp, i)
-      else pl > cl
-        i = pl - cl
-        qbc = match_decimal(qbc, i)
-      end
-    end
-    margin = (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
-    # IF STATEMENT FOR MARGIN SIZE HERE
-    return (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
-  # end
-  return nil
+def calculate_margin(qb_item, mfg_item)
+  if mfg_item["MAP"]
+    return 0.85
+  else return 0.50
+  end
+end
+
+# def calculate_margin(qb_item)
+#   p "margin"
+#   p "#{qb_item["Cost"]} - #{qb_item["Price"]}"
+#   qbc = qb_item["Cost"].delete('.')
+#   qbp = qb_item['Price'].delete('.')
+#   cl = price_length(qb_item['Cost'])
+#   pl = price_length(qb_item['Price'])
+#   if cl > pl
+#     i = cl - pl
+#     qbp = match_decimal(qbp, i)
+#   elsif pl > cl
+#     i = pl - cl
+#     qbc = match_decimal(qbc, i)
+#   end
+#   margin = (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
+#   # IF STATEMENT FOR MARGIN SIZE HERE
+#   return (qbc.to_i * 1.00) / (qbp.to_i * 1.00)
+# end
+
+def price_length(item)
+  if item.include?('.')
+    return item.split(".")[-1].length
+  else
+    return 0
+  end
 end
 
 def match_decimal(num, i)
@@ -145,13 +163,6 @@ end
 def calculate_qb_cost(qb_item)
   return (qb_item['Cost'].delete('.').to_i) * 100
 end
-
-# def calculate_mfg_cost(mfg_item)
-#   mfg_unit_price = 1000.00 if mfg_item['PRICE PER'] == "M"
-#   mfg_unit_price = 100.00 if mfg_item['PRICE PER'] == "C"
-#   mfg_unit_price = 1.00 if mfg_item['PRICE PER'] == "EA"
-#   return mfg_item['Cost'].to_f / mfg_unit_price
-# end
 
 def message
   p "*************************"
@@ -171,4 +182,19 @@ end
 
 runner(mfg, qbil)
 
+603622850
+603625420
+603624420
+603627420
+603629420
+600437420
+603632420
+603633420
+603645420
+600517420
+603829620
+600431420
+600431680
+600431690
+603625420
 

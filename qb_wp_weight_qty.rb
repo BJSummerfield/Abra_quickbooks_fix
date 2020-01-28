@@ -1,6 +1,6 @@
 require 'csv'
 
-qbil = CSV.read('../csv/mkt_edit.csv')
+qbil = CSV.read('../csv/metabo_edit.csv')
 wpil = CSV.read('../csv/wpil1_23_20.csv')
 
 @m = 0
@@ -11,10 +11,11 @@ def runner(qbil, wpil)
   wpil = convert_to_hash(wpil)
   parse_mpn(qbil, wpil)
   write_file(wpil)
+  p @m
 end
 
 def write_file(wpil)
-  CSV.open("../csv/mkt_weights.csv", "wb") do |csv|
+  CSV.open("../csv/metabo_weights.csv", "wb") do |csv|
     input = []
     wpil[0].each do |k,v|
       input << k
@@ -37,11 +38,11 @@ def parse_mpn(qbil, wpil)
 end
 
 def parse_wp(qbitem, wpil)
-  check = false
   wpil.each do |wpitem|
-    if qbitem['Item'].split(':')[1] == wpitem["SKU"] && wpitem['SKU'] != nil
+    if qbitem["MPN"] == wpitem["MPN"] && wpitem["SKU"] != nil
+    # if qbitem['Item'].split(':')[1] == wpitem["SKU"] && wpitem['SKU'] != nil
       @m += 1
-      check = true
+      p qbitem["Item"]
       item_match(qbitem, wpitem)
       @array << wpitem
     end
@@ -51,7 +52,7 @@ end
 def item_match(qbitem, wpitem)
   wpitem['MPN'] = qbitem['MPN']
   wpitem['Regular price'] = qbitem['Price']
-  wpitem['Meta: _wpm_gtn_code'] = qbitem['MPN']
+  wpitem['Meta: _wpm_gtin_code'] = qbitem['MPN']
   wpitem['Weight (lbs)'] = qbitem['Weight']
   wpitem['Meta: variation_group_of_quantity'] = qbitem['Unit Qty']
   description_edit(qbitem, wpitem)
