@@ -1,5 +1,4 @@
 require 'mechanize'
-require 'nokogiri'
 require 'csv'
 
 @items = []
@@ -28,7 +27,7 @@ end
 
 def get_item_list
   array = []
-  list = CSV.read('./csv/simpson.csv')
+  list = CSV.read('../csv/simpson.csv')
   list.each do |row|
     if row[0] == 'MPN'
     else
@@ -39,7 +38,7 @@ def get_item_list
 end
 
 def write_file
-  CSV.open('./simpsonPrice.csv', 'wb') do |csv|
+  CSV.open('../simpsonPriceList.csv', 'wb') do |csv|
     input = []
     @items[0][0].each do |k,v|
       input << k
