@@ -1,6 +1,6 @@
 require 'csv'
 
-qbil = CSV.read('../csv/metabo_edit.csv')
+qbil = CSV.read('../csv/simpson_edit.csv')
 wpil = CSV.read('../csv/wpil1_23_20.csv')
 
 @m = 0
@@ -15,7 +15,7 @@ def runner(qbil, wpil)
 end
 
 def write_file(wpil)
-  CSV.open("../csv/metabo_weights.csv", "wb") do |csv|
+  CSV.open("../csv/simpson_weights.csv", "wb") do |csv|
     input = []
     wpil[0].each do |k,v|
       input << k
@@ -39,7 +39,7 @@ end
 
 def parse_wp(qbitem, wpil)
   wpil.each do |wpitem|
-    if qbitem["MPN"] == wpitem["MPN"] && wpitem["SKU"] != nil
+    if qbitem["MPN"] == wpitem["MPN"] && wpitem["SKU"] != nil && wpitem["MPN"] != "MPN"
     # if qbitem['Item'].split(':')[1] == wpitem["SKU"] && wpitem['SKU'] != nil
       @m += 1
       p qbitem["Item"]
